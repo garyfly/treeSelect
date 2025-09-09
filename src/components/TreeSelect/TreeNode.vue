@@ -3,7 +3,7 @@
     <div class="node-item" :class="{ 'is-selected': isChecked }" @click.stop="handleLabelClick">
       <span @click.stop="toggleExpand" class="toggle-icon-wrapper">
         <span v-if="hasChildren" class="toggle-icon">
-          {{ isExpanded ? '▼' : '►' }}
+          {{ isExpanded ? "▼" : "►" }}
         </span>
         <span v-else class="toggle-icon-placeholder"></span>
       </span>
@@ -20,13 +20,15 @@
 
     <div v-if="isExpanded && hasChildren" class="node-children">
       <TreeNode v-for="child in node.children" :key="child.id" :node="child" :modelValue="modelValue"
-        :searchTerm="searchTerm" :parentMode="currentMode" :siblings="node.children" @update="emitUpdate" />
+        :multiple="currentMode === 'multiple'"
+        :searchTerm="searchTerm" :parentMode="currentMode" :siblings="node.children"
+        @update="emitUpdate" @select="emitSelect" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, defineProps, defineEmits } from 'vue';
+import { ref, computed, defineProps, defineEmits } from "vue";
 
 // 定义节点类型
 interface TreeNode {
@@ -38,24 +40,34 @@ interface TreeNode {
 
 const props = defineProps({
   node: { type: Object as () => TreeNode, required: true },
-  modelValue: { type: Array, default: () => [] },
-  searchTerm: { type: String, default: '' },
+  modelValue: { type: [Array, String, Number], default: null },
+  multiple: { type: Boolean, default: false },
+  searchTerm: { type: String, default: "" },
   // 从父节点继承选择模式
-  parentMode: { type: String, default: 'multiple' },
+  parentMode: { type: String, default: "multiple" },
   // 传入同级节点，用于处理单选逻辑
-  siblings: { type: Array as () => TreeNode[], default: () => [] }
+  siblings: { type: Array as () => TreeNode[], default: () => [] },
 });
 
-const emit = defineEmits(['update']);
+const emit = defineEmits(["update", "select"]);
 
 const isExpanded = ref(true);
 
 // --- 计算属性 ---
 
 // 确定当前节点的选择模式，如果自身未定义，则继承父节点
-const currentMode = computed(() => props.node.selectionMode || props.parentMode);
+const currentMode = computed(() => {
+  // 如果节点自身定义了 selectionMode，则使用它
+  if (props.node.selectionMode) {
+    return props.node.selectionMode;
+  }
+  // 如果没有定义，则根据 multiple 属性判断
+  return props.multiple ? "multiple" : props.parentMode;
+});
 
-const hasChildren = computed(() => props.node.children && props.node.children.length > 0);
+const hasChildren = computed(
+  () => props.node.children && props.node.children.length > 0
+);
 
 const allDescendantIds = computed(() => {
   const ids: any[] = [];
@@ -63,29 +75,51 @@ const allDescendantIds = computed(() => {
     ids.push(node.id);
     if (node.children) node.children.forEach(collectIds);
   }
-  if (hasChildren.value && props.node.children) props.node.children.forEach(collectIds);
+  if (hasChildren.value && props.node.children)
+    props.node.children.forEach(collectIds);
   return ids;
 });
 
 // 节点是否被选中
-const isChecked = computed(() => props.modelValue.includes(props.node.id));
+const isChecked = computed(() => {
+  if (Array.isArray(props.modelValue)) {
+    return props.modelValue.includes(props.node.id);
+  } else {
+    return props.modelValue === props.node.id;
+  }
+});
 
 // 多选模式下的半选状态
 const isIndeterminate = computed(() => {
-  if (currentMode.value !== 'multiple' || !hasChildren.value || isChecked.value) {
+  if (
+    currentMode.value !== "multiple" ||
+    !hasChildren.value ||
+    isChecked.value
+  ) {
     return false;
   }
-  const selectedChildren = allDescendantIds.value.filter(id => props.modelValue.includes(id));
-  return selectedChildren.length > 0;
+
+  // 确保 modelValue 是数组格式再处理
+  const modelValueArray = Array.isArray(props.modelValue)
+    ? props.modelValue
+    : [];
+  const selectedChildren = allDescendantIds.value.filter((id) =>
+    modelValueArray.includes(id)
+  );
+  return (
+    selectedChildren.length > 0 &&
+    selectedChildren.length < allDescendantIds.value.length
+  );
 });
 
 const isVisible = computed(() => {
   if (!props.searchTerm) return true;
-  // ... (搜索逻辑与之前版本相同)
   const searchLower = props.searchTerm.toLowerCase();
   const isSelfVisible = props.node.label.toLowerCase().includes(searchLower);
   if (isSelfVisible) return true;
-  const isChildVisible = (node: TreeNode) => node.label.toLowerCase().includes(searchLower) || (node.children ? node.children.some(isChildVisible) : false);
+  const isChildVisible = (node: TreeNode) =>
+    node.label.toLowerCase().includes(searchLower) ||
+    (node.children ? node.children.some(isChildVisible) : false);
   return hasChildren.value && props.node.children?.some(isChildVisible);
 });
 
@@ -101,15 +135,23 @@ const handleSelect = () => {
   const toAdd = new Set();
   const toRemove = new Set();
 
-  if (currentMode.value === 'single') {
+  if (currentMode.value === "single") {
     // 单选逻辑
-    if (!isChecked.value) { // 只有在未选中时才操作
+    if (!isChecked.value) {
+      // 只有在未选中时才操作
       toAdd.add(props.node.id);
       // 移除所有同级节点的选中状态
       props.siblings.forEach((sibling) => {
         if (sibling.id !== props.node.id) {
           toRemove.add(sibling.id);
         }
+      });
+
+      // 发送 select 事件用于单选模式
+      emit("select", {
+        id: props.node.id,
+        ids: [props.node.id],
+        isSelected: true,
       });
     }
   } else {
@@ -118,21 +160,33 @@ const handleSelect = () => {
     const shouldSelect = !isChecked.value;
 
     if (shouldSelect) {
-      idsToUpdate.forEach(id => toAdd.add(id));
+      idsToUpdate.forEach((id) => toAdd.add(id));
     } else {
-      idsToUpdate.forEach(id => toRemove.add(id));
+      idsToUpdate.forEach((id) => toRemove.add(id));
     }
+
+    // 发送 select 事件用于多选模式
+    emit("select", {
+      ids: idsToUpdate,
+      isSelected: shouldSelect,
+    });
   }
 
   // 向上层发出带有 add 和 remove 列表的事件
-  emit('update', {
+  emit("update", {
     add: Array.from(toAdd),
-    remove: Array.from(toRemove)
+    remove: Array.from(toRemove),
   });
 };
 
 const emitUpdate = (payload: any) => {
-  emit('update', payload);
+  // 将事件向上传递
+  emit("update", payload);
+};
+
+const emitSelect = (payload: any) => {
+  // 将 select 事件向上传递
+  emit("select", payload);
 };
 </script>
 

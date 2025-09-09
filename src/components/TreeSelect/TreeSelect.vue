@@ -10,8 +10,15 @@
       <div v-if="isOpen" class="dropdown-panel">
         <input type="text" v-model="searchTerm" placeholder="Search..." class="search-input" @click.stop />
         <div class="tree-view">
-          <TreeNode v-for="option in options" :key="option.id" :node="option" :multiple="multiple"
-            :modelValue="modelValue" :searchTerm="searchTerm" @select="handleNodeSelect" />
+          <TreeNode 
+            v-for="option in options" 
+            :key="option.id" 
+            :node="option" 
+            :modelValue="modelValue"
+            :multiple="multiple"
+            :searchTerm="searchTerm" 
+            @select="handleNodeSelect" 
+            @update="handleNodeUpdate" />
         </div>
       </div>
     </Transition>
@@ -79,6 +86,8 @@ const handleClickOutside = (event) => {
 };
 
 const handleNodeSelect = (payload) => {
+  console.log('handleNodeSelect', payload);
+
   if (props.multiple) {
     const { ids, isSelected } = payload;
     let currentSelection = new Set(Array.isArray(props.modelValue) ? props.modelValue : []);
@@ -93,6 +102,29 @@ const handleNodeSelect = (payload) => {
   } else {
     emit('update:modelValue', payload.id);
     closeDropdown();
+  }
+};
+
+const handleNodeUpdate = (payload) => {
+  console.log('handleNodeUpdate', payload);
+  
+  if (props.multiple) {
+    const { add = [], remove = [] } = payload;
+    let currentSelection = new Set(Array.isArray(props.modelValue) ? props.modelValue : []);
+    
+    // 添加需要选中的项
+    add.forEach(id => currentSelection.add(id));
+    
+    // 移除需要取消选中的项
+    remove.forEach(id => currentSelection.delete(id));
+    
+    emit('update:modelValue', Array.from(currentSelection));
+  } else {
+    // 单选模式下，直接设置选中值
+    if (payload.add && payload.add.length > 0) {
+      emit('update:modelValue', payload.add[0]);
+      closeDropdown();
+    }
   }
 };
 
