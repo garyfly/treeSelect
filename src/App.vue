@@ -2,7 +2,7 @@
   <div id="app">
     <h1>混合模式树形选择组件</h1>
     <p>当前选中的所有 ID: {{ selectedIds }}</p>
-    <TreeSelect v-model="selectedIds" :options="treeData" placeholder="请选择..." />
+    <TreeSelect v-model="selectedIds" :options="treeData" :multiple="true" placeholder="请选择..." />
   </div>
 </template>
 

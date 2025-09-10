@@ -66,8 +66,8 @@ const optionsMap = computed(() => {
 const selectedLabel = computed(() => {
   if (!hasSelection.value) return '';
   if (props.multiple) {
-    const count = props.modelValue.length;
-    return `${count} item${count > 1 ? 's' : ''} selected`;
+    // 多选模式下显示所有选中项的文字
+    return props.modelValue.map(id => optionsMap.value[id]).filter(label => label).join(', ');
   }
   return optionsMap.value[props.modelValue] || '';
 });
@@ -90,15 +90,26 @@ const handleNodeSelect = (payload) => {
 
   if (props.multiple) {
     const { ids, isSelected } = payload;
-    let currentSelection = new Set(Array.isArray(props.modelValue) ? props.modelValue : []);
-
-
+    let currentSelection = new Set(Array.isArray(props.modelValue) ? [...props.modelValue] : []);
+    
+    // 使用Set操作确保选中状态正确更新
     if (isSelected) {
+      // 添加选中的节点ID
       ids.forEach(id => currentSelection.add(id));
     } else {
+      // 移除未选中的节点ID
       ids.forEach(id => currentSelection.delete(id));
     }
-    emit('update:modelValue', Array.from(currentSelection));
+    
+    // 转换为数组并排序，保持选中项顺序一致
+    const sortedSelection = Array.from(currentSelection).sort((a, b) => {
+      // 根据原始数据中的顺序排序
+      const indexA = props.options.findIndex(option => option.id === a);
+      const indexB = props.options.findIndex(option => option.id === b);
+      return indexA - indexB;
+    });
+    
+    emit('update:modelValue', sortedSelection);
   } else {
     emit('update:modelValue', payload.id);
     closeDropdown();
@@ -110,20 +121,35 @@ const handleNodeUpdate = (payload) => {
   
   if (props.multiple) {
     const { add = [], remove = [] } = payload;
-    let currentSelection = new Set(Array.isArray(props.modelValue) ? props.modelValue : []);
+    let currentSelection = new Set(Array.isArray(props.modelValue) ? [...props.modelValue] : []);
     
-    // 添加需要选中的项
-    add.forEach(id => currentSelection.add(id));
+    // 添加需要选中的项（确保不重复添加）
+    add.forEach(id => {
+      if (!currentSelection.has(id)) {
+        currentSelection.add(id);
+      }
+    });
     
     // 移除需要取消选中的项
     remove.forEach(id => currentSelection.delete(id));
     
-    emit('update:modelValue', Array.from(currentSelection));
+    // 转换为数组并排序，保持选中项顺序一致
+    const sortedSelection = Array.from(currentSelection).sort((a, b) => {
+      // 根据原始数据中的顺序排序
+      const indexA = props.options.findIndex(option => option.id === a);
+      const indexB = props.options.findIndex(option => option.id === b);
+      return indexA - indexB;
+    });
+    
+    emit('update:modelValue', sortedSelection);
   } else {
     // 单选模式下，直接设置选中值
     if (payload.add && payload.add.length > 0) {
       emit('update:modelValue', payload.add[0]);
       closeDropdown();
+    } else if (payload.remove && payload.remove.length > 0) {
+      // 如果是取消选择，则清空modelValue
+      emit('update:modelValue', null);
     }
   }
 };

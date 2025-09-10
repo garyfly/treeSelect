@@ -3,7 +3,7 @@
     <div class="node-item" :class="{ 'is-selected': isChecked }" @click.stop="handleLabelClick">
       <span @click.stop="toggleExpand" class="toggle-icon-wrapper">
         <span v-if="hasChildren" class="toggle-icon">
-          {{ isExpanded ? "▼" : "►" }}
+          {{ isExpanded ? "−" : "+" }}
         </span>
         <span v-else class="toggle-icon-placeholder"></span>
       </span>
@@ -20,9 +20,8 @@
 
     <div v-if="isExpanded && hasChildren" class="node-children">
       <TreeNode v-for="child in node.children" :key="child.id" :node="child" :modelValue="modelValue"
-        :multiple="currentMode === 'multiple'"
-        :searchTerm="searchTerm" :parentMode="currentMode" :siblings="node.children"
-        @update="emitUpdate" @select="emitSelect" />
+        :multiple="currentMode === 'multiple'" :searchTerm="searchTerm" :parentMode="currentMode"
+        :siblings="node.children" @update="emitUpdate" @select="emitSelect" />
     </div>
   </div>
 </template>
@@ -65,10 +64,12 @@ const currentMode = computed(() => {
   return props.multiple ? "multiple" : props.parentMode;
 });
 
+// 节点是否有子节点
 const hasChildren = computed(
   () => props.node.children && props.node.children.length > 0
 );
 
+// 所有后代节点的 ID
 const allDescendantIds = computed(() => {
   const ids: any[] = [];
   function collectIds(node: TreeNode) {
@@ -112,6 +113,7 @@ const isIndeterminate = computed(() => {
   );
 });
 
+// 节点是否可见
 const isVisible = computed(() => {
   if (!props.searchTerm) return true;
   const searchLower = props.searchTerm.toLowerCase();
@@ -125,12 +127,15 @@ const isVisible = computed(() => {
 
 // --- 方法 ---
 
+// 展开/折叠节点
 const toggleExpand = () => {
   if (hasChildren.value) isExpanded.value = !isExpanded.value;
 };
 
+// 单击节点时处理选择逻辑
 const handleLabelClick = () => handleSelect();
 
+// 处理选择逻辑
 const handleSelect = () => {
   const toAdd = new Set();
   const toRemove = new Set();
@@ -153,7 +158,18 @@ const handleSelect = () => {
         ids: [props.node.id],
         isSelected: true,
       });
+    } else {
+      // 如果已选中，则取消选择
+      toRemove.add(props.node.id);
+
+      // 发送 select 事件用于单选模式
+      emit("select", {
+        id: props.node.id,
+        ids: [props.node.id],
+        isSelected: false,
+      });
     }
+
   } else {
     // 多选逻辑
     const idsToUpdate = [props.node.id, ...allDescendantIds.value];
@@ -179,11 +195,13 @@ const handleSelect = () => {
   });
 };
 
+// 向上层发出更新事件
 const emitUpdate = (payload: any) => {
   // 将事件向上传递
   emit("update", payload);
 };
 
+// 向上层发出 select 事件
 const emitSelect = (payload: any) => {
   // 将 select 事件向上传递
   emit("select", payload);
